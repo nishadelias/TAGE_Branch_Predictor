@@ -13,12 +13,12 @@
 
 class my_update : public branch_update {
 public:
-    std::vector<unsigned int> indices;
-    std::vector<unsigned int> tags;
-    std::vector<bool> predictions;
-    unsigned int base_prediction;
-    int chosen_component;
-    bool base_prediction_used;
+    std::vector<unsigned int> indices;  // Indices in the tagged tables
+    std::vector<unsigned int> tags;     // Tags computed from history
+    std::vector<bool> predictions;      // Predictions from tagged tables
+    unsigned int base_prediction;       // Prediction from the base predictor
+    int chosen_component;               // Index of the chosen tagged component
+    bool base_prediction_used;          // Indicates if base predictor was used
 };
 
 struct tagged_entry {
@@ -29,18 +29,18 @@ struct tagged_entry {
 
 class my_predictor : public branch_predictor {
 public:
-    my_update u;
-    branch_info bi;
-    unsigned int global_history;
-    std::vector<std::vector<tagged_entry> > tagged_tables;
-    std::vector<unsigned int> history_lengths;
-    unsigned char base_predictor[1 << BASE_TABLE_BITS];
+    my_update u;                                                // Indices in the tagged tables
+    branch_info bi;                                             // Branch information object
+    unsigned int global_history;                                // Global history register
+    std::vector<std::vector<tagged_entry> > tagged_tables;      // Tagged tables with geometric history
+    std::vector<unsigned int> history_lengths;                  // History lengths for each tagged table
+    unsigned char base_predictor[1 << BASE_TABLE_BITS];         // Simple base predictor
 
     my_predictor(void) : global_history(0) {
         // Initialize base predictor
         memset(base_predictor, 2, sizeof(base_predictor));  // Initialize to weakly taken
 
-        // Initialize history lengths geometrically
+        // Initialize history lengths
         history_lengths.push_back(6);
         history_lengths.push_back(12);     
         history_lengths.push_back(19);
@@ -60,6 +60,7 @@ public:
 
     // Compute index for a tagged component
     unsigned int compute_index(unsigned int pc, unsigned int history, unsigned int comp_id) {
+        // XORing pc with shifted pc and masked history to get index
         unsigned int index = pc ^ (pc >> (abs((int)history_lengths[comp_id] - (int)comp_id) + 1));
         index ^= history & ((1 << history_lengths[comp_id]) - 1);
         return index & ((1 << TAG_TABLE_BITS) - 1);
@@ -67,6 +68,7 @@ public:
 
     // Compute tag for a tagged component
     unsigned int compute_tag(unsigned int pc, unsigned int history, unsigned int comp_id) {
+        // XORing pc with masked history and shifted history to get tag
         unsigned int tag = pc ^ (history & ((1 << history_lengths[comp_id]) - 1));
         tag ^= (history >> history_lengths[comp_id]) & ((1 << TAG_BITS) - 1);
         return tag & ((1 << TAG_BITS) - 1);
@@ -169,7 +171,7 @@ public:
             }
         }
 
-        // Update global history
+        // Update global history by shifting left and adding the taken bit
         global_history <<= 1;
         global_history |= taken;
         global_history &= (1 << HISTORY_LENGTH) - 1;
